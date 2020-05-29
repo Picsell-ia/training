@@ -448,21 +448,36 @@ def tfevents_to_dict(path):
     event = [filename for filename in os.listdir(path) if filename.startswith("events.out")][0]
     event_acc = EventAccumulator(os.path.join(path,event)).Reload()
     logs = dict()
+    # dict_logs = dict()
+    # K=0
     for scalar_key in event_acc.scalars.Keys():
-        scalar_dict = {"wall_time": [], "step": [], "value": []}
+        scalar_dict = {"step": [], "value": []}
+
         for scalars in event_acc.Scalars(scalar_key):
-            scalar_dict["wall_time"].append(scalars.wall_time)
             scalar_dict["step"].append(scalars.step)
             scalar_dict["value"].append(scalars.value)
         logs[scalar_key] = scalar_dict
+    #     if K==0:
+    #         K = len(event_acc.Scalars(scalar_key))
+    #         if K<500:
+    #             Idx = np.logspace(1,np.log10(K-1), int(K/10), dtype=np.uint32)
+    #             Idx = list(np.arange(0,9,1))+list(Idx)
+
+    # if len(Idx)<=len(logs["Losses/TotalLoss"]["value"]):
+    #     for key in logs.keys():
+    #         dict_logs[key]=dict.fromkeys(["value","step"])
+    #         dict_logs[key]["value"] = list(np.array(logs[key]["value"])[Idx])
+    #         dict_logs[key]["step"] = list(np.array(logs[key]["step"])[Idx].astype(float))
+    #     return dict_logs
+
     return logs
+    
 
 
 def export_infer_graph(ckpt_dir, exported_model_dir, pipeline_config_path,
                         write_inference_graph=False, input_type="image_tensor", input_shape=None):
     
     ''' Export your checkpoint to a saved_model.pb file
-
         Args:
             Required:
                 ckpt_dir: The directory where your checkpoint to export is located.
@@ -564,7 +579,8 @@ def infer(path_list, exported_model_dir, label_map_path, results_dir, disp=True,
                                                 instance_masks=masks,
                                                 use_normalized_coordinates=True,
                                                 line_thickness=3,
-                                                min_score_thresh=min_score_thresh)
+                                                min_score_thresh=min_score_thresh,
+                                                max_boxes_to_draw=None)
 
             img_name = img_path.split("/")[-1]
             Image.fromarray(img).save(os.path.join(results_dir,img_name))
