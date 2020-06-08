@@ -445,7 +445,7 @@ def tfevents_to_dict(path):
         Returns:
             A dictionnary of scalars logs.
     '''
-    event = [filename for filename in os.listdir(path) if filename.startswith("events.out")][0]
+    event = [filename for filename in os.listdir(path) if filename.startswith("events.out")][-1]
     event_acc = EventAccumulator(os.path.join(path,event)).Reload()
     logs = dict()
     # dict_logs = dict()
@@ -534,6 +534,7 @@ def infer(path_list, exported_model_dir, label_map_path, results_dir, disp=True,
             num_detections = int(output_dict.pop('num_detections'))
             output_dict = {key:value[0, :num_detections] for key,value in output_dict.items()}
             output_dict['num_detections'] = num_detections
+            print(output_dict['detection_classes'].astype(np.int64))
             output_dict['detection_classes'] = output_dict['detection_classes'].astype(np.int64)
 
             if 'detection_masks' in output_dict:
