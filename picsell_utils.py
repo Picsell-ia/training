@@ -213,8 +213,28 @@ def edit_masks(config_dict, mask_type="PNG_MASKS"):
     else:
         raise ValueError("Wrong Mask type provided")
 
+
+def set_variable_loader(config_dict, incremental_or_transfer, FromSratch=False):
+    '''
+        Choose the training type. If incremental then all variables from the checkpoint are loaded, used to resume a training.
+    Args:
+        config_dict: A configuration dictionnary loaded from the protobuf file with config_util.get_configs_from_pipeline_file().
+        incremental_or_transfer: String name to identify use case "transfer" of "incremental".
+    Raises:
+        ValueError
+    '''
+    if not FromSratch:
+        config_dict["train_config"].from_detection_checkpoint = True
+    if incremental_or_transfer == "incremental":
+        config_dict["train_config"].load_all_detection_checkpoint_vars = True
+    elif incremental_or_transfer == "transfer":
+        config_dict["train_config"].load_all_detection_checkpoint_vars = False
+    else:
+        raise ValueError("Please choose if you want to do transfer or incremental learning") 
+
+
 def edit_config(model_selected, config_output_dir, num_steps, label_map_path, record_dir, eval_number, annotation_type, 
-                batch_size=None, learning_rate=None, resizer_size=None):
+                batch_size=None, learning_rate=None, resizer_size=None, incremental_or_transfer="transfer"):
     '''
         Wrapper to edit the essential values inside the base configuration protobuf file provided with an object-detection/segmentation checkpoint.
         This configuration file is what will entirely define your model, pre-processing, training, evaluation etc. It is the most important file of a model with the checkpoint file and should never be deleted. 
@@ -273,11 +293,14 @@ def edit_config(model_selected, config_output_dir, num_steps, label_map_path, re
     if resizer_size is not None:
         set_image_resizer(configs, resizer_size)
 
+    if incremental_or_transfer is not None:
+        set_variable_loader(configs, incremental_or_transfer)
+    
     edit_eval_config(configs, annotation_type, eval_number)
     update_num_classes(configs, label_map)
     config_proto = config_util.create_pipeline_proto_from_configs(configs)
     config_util.save_pipeline_config(config_proto, directory=config_output_dir)
-
+    
 
 def train(master='', save_summaries_secs=30, task=0, num_clones=1, clone_on_cpu=False, worker_replicas=1, ps_tasks=0, 
                     ckpt_dir='', conf_dir='', train_config_path='', input_config_path='', model_config_path=''):   
