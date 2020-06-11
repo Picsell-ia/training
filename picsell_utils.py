@@ -308,7 +308,7 @@ def edit_config(model_selected, config_output_dir, num_steps, label_map_path, re
 
     if batch_size is not None:
         config_util._update_batch_size(configs, batch_size)
-    check_batch_size(config_dict)
+    check_batch_size(configs)
 
     if annotation_type=="polygon":
         edit_masks(configs, mask_type="PNG_MASKS")
