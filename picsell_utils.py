@@ -112,6 +112,27 @@ def update_num_classes(config_dict, label_map):
         raise ValueError("Expected the model to be one of 'faster_rcnn' or 'ssd'.")
 
 
+
+def check_batch_size(config_dict):
+    model_config = config_dict["model"]
+    meta_architecture = model_config.WhichOneof("model")
+    batch_size = config_dict["train_config"].batch_size
+    if meta_architecture == "faster_rcnn":
+        image_resizer = model_config.faster_rcnn.image_resizer
+    elif meta_architecture == "ssd":
+        image_resizer = model_config.ssd.image_resizer
+    else:
+        raise ValueError("Unknown model type: {}".format(meta_architecture))
+
+    if image_resizer.HasField("keep_aspect_ratio_resizer") and batch_size>1:
+        print("Please be careful, your image resizer is keep_aspect_ratio_resizer and your batch size is >1.")
+        print("This mean that all your images should have the same shape. If not then set batch size to 1 or change the image resizer to a fixed_shape_resizer.")
+        
+    #image_resizer.HasField("fixed_shape_resizer"):
+    
+
+    
+
 def set_image_resizer(config_dict, shape):
     '''
         Update the image resizer shapes.
@@ -213,8 +234,29 @@ def edit_masks(config_dict, mask_type="PNG_MASKS"):
     else:
         raise ValueError("Wrong Mask type provided")
 
+
+def set_variable_loader(config_dict, incremental_or_transfer, FromSratch=False):
+    '''
+        Choose the training type. If incremental then all variables from the checkpoint are loaded, used to resume a training.
+    Args:
+        config_dict: A configuration dictionnary loaded from the protobuf file with config_util.get_configs_from_pipeline_file().
+        incremental_or_transfer: String name to identify use case "transfer" of "incremental".
+    Raises:
+        ValueError
+    '''
+    if not FromSratch:
+        config_dict["train_config"].from_detection_checkpoint = True
+    if incremental_or_transfer == "incremental":
+        config_dict["train_config"].load_all_detection_checkpoint_vars = True
+    elif incremental_or_transfer == "transfer":
+        config_dict["train_config"].load_all_detection_checkpoint_vars = False
+    else:
+        raise ValueError("Please choose if you want to do transfer or incremental learning") 
+
+
+
 def edit_config(model_selected, config_output_dir, num_steps, label_map_path, record_dir, eval_number, annotation_type, 
-                batch_size=None, learning_rate=None, resizer_size=None):
+                batch_size=None, learning_rate=None, resizer_size=None, incremental_or_transfer="transfer"):
     '''
         Wrapper to edit the essential values inside the base configuration protobuf file provided with an object-detection/segmentation checkpoint.
         This configuration file is what will entirely define your model, pre-processing, training, evaluation etc. It is the most important file of a model with the checkpoint file and should never be deleted. 
@@ -266,6 +308,7 @@ def edit_config(model_selected, config_output_dir, num_steps, label_map_path, re
 
     if batch_size is not None:
         config_util._update_batch_size(configs, batch_size)
+    check_batch_size(configs)
 
     if annotation_type=="polygon":
         edit_masks(configs, mask_type="PNG_MASKS")
@@ -273,10 +316,15 @@ def edit_config(model_selected, config_output_dir, num_steps, label_map_path, re
     if resizer_size is not None:
         set_image_resizer(configs, resizer_size)
 
+    if incremental_or_transfer is not None:
+        set_variable_loader(configs, incremental_or_transfer)
+    
     edit_eval_config(configs, annotation_type, eval_number)
     update_num_classes(configs, label_map)
     config_proto = config_util.create_pipeline_proto_from_configs(configs)
     config_util.save_pipeline_config(config_proto, directory=config_output_dir)
+    print(f"Configuration successfully edited and saved at {config_output_dir}")
+
 
 
 def train(master='', save_summaries_secs=30, task=0, num_clones=1, clone_on_cpu=False, worker_replicas=1, ps_tasks=0, 
@@ -445,7 +493,7 @@ def tfevents_to_dict(path):
         Returns:
             A dictionnary of scalars logs.
     '''
-    event = [filename for filename in os.listdir(path) if filename.startswith("events.out")][0]
+    event = [filename for filename in os.listdir(path) if filename.startswith("events.out")][-1]
     event_acc = EventAccumulator(os.path.join(path,event)).Reload()
     logs = dict()
     # dict_logs = dict()
