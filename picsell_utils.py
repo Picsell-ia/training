@@ -112,6 +112,27 @@ def update_num_classes(config_dict, label_map):
         raise ValueError("Expected the model to be one of 'faster_rcnn' or 'ssd'.")
 
 
+
+def check_batch_size(config_dict):
+    model_config = config_dict["model"]
+    meta_architecture = model_config.WhichOneof("model")
+    batch_size = config_dict["train_config"].batch_size
+    if meta_architecture == "faster_rcnn":
+        image_resizer = model_config.faster_rcnn.image_resizer
+    elif meta_architecture == "ssd":
+        image_resizer = model_config.ssd.image_resizer
+    else:
+        raise ValueError("Unknown model type: {}".format(meta_architecture))
+
+    if image_resizer.HasField("keep_aspect_ratio_resizer") and batch_size>1:
+        print("Please be careful, your image resizer is keep_aspect_ratio_resizer and your batch size is >1.")
+        print("This mean that all your images should have the same shape. If not then set batch size to 1 or change the image resizer to a fixed_shape_resizer.")
+        
+    #image_resizer.HasField("fixed_shape_resizer"):
+    
+
+    
+
 def set_image_resizer(config_dict, shape):
     '''
         Update the image resizer shapes.
@@ -233,6 +254,7 @@ def set_variable_loader(config_dict, incremental_or_transfer, FromSratch=False):
         raise ValueError("Please choose if you want to do transfer or incremental learning") 
 
 
+
 def edit_config(model_selected, config_output_dir, num_steps, label_map_path, record_dir, eval_number, annotation_type, 
                 batch_size=None, learning_rate=None, resizer_size=None, incremental_or_transfer="transfer"):
     '''
@@ -286,6 +308,7 @@ def edit_config(model_selected, config_output_dir, num_steps, label_map_path, re
 
     if batch_size is not None:
         config_util._update_batch_size(configs, batch_size)
+    check_batch_size(config_dict)
 
     if annotation_type=="polygon":
         edit_masks(configs, mask_type="PNG_MASKS")
@@ -300,7 +323,9 @@ def edit_config(model_selected, config_output_dir, num_steps, label_map_path, re
     update_num_classes(configs, label_map)
     config_proto = config_util.create_pipeline_proto_from_configs(configs)
     config_util.save_pipeline_config(config_proto, directory=config_output_dir)
-    
+    print(f"Configuration successfully edited and saved at {config_output_dir}")
+
+
 
 def train(master='', save_summaries_secs=30, task=0, num_clones=1, clone_on_cpu=False, worker_replicas=1, ps_tasks=0, 
                     ckpt_dir='', conf_dir='', train_config_path='', input_config_path='', model_config_path=''):   
