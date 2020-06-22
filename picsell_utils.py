@@ -521,9 +521,8 @@ def tfevents_to_dict(path):
     return logs
     
 
-
 def export_infer_graph(ckpt_dir, exported_model_dir, pipeline_config_path,
-                        write_inference_graph=False, input_type="image_tensor", input_shape=None):
+                        write_inference_graph=False, input_type="image_tensor", input_shape=None, sufix=True):
     
     ''' Export your checkpoint to a saved_model.pb file
         Args:
@@ -539,12 +538,15 @@ def export_infer_graph(ckpt_dir, exported_model_dir, pipeline_config_path,
     config_dict = config_util.get_configs_from_pipeline_file(pipeline_config_path)
     ckpt_number = str(config_dict["train_config"].num_steps)
     pipeline_config = config_util.create_pipeline_proto_from_configs(config_dict)
-
-    trained_checkpoint_prefix = os.path.join(ckpt_dir,'model.ckpt-'+ckpt_number)
+    if sufix==False:
+        trained_checkpoint_prefix = os.path.join(ckpt_dir,'model.ckpt')
+    else:
+        trained_checkpoint_prefix = os.path.join(ckpt_dir,'model.ckpt-'+ckpt_number)
     exporter.export_inference_graph(
         input_type, pipeline_config, trained_checkpoint_prefix,
         exported_model_dir, input_shape=input_shape,
         write_inference_graph=write_inference_graph)
+
 
 
 
