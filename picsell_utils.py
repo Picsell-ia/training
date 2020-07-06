@@ -47,8 +47,11 @@ def create_record_files(label_path, record_dir, tfExample_generator, annotation_
     for dataset in datasets:
         output_path = os.path.join(record_dir, dataset+".record")
         writer = tf.python_io.TFRecordWriter(output_path)
+        print(f"Creating record file at {output_path}")
         for variables in tfExample_generator(label_map, ensemble=dataset, annotation_type=annotation_type):
-            if annotation_type=="polygon":
+            if isinstance(variables, ValueError):
+                print(variables)
+            elif annotation_type=="polygon":
                 (width, height, xmins, xmaxs, ymins, ymaxs, filename,
                      encoded_jpg, image_format, classes_text, classes, masks) = variables
             
@@ -86,7 +89,7 @@ def create_record_files(label_path, record_dir, tfExample_generator, annotation_
                     'image/object/class/text': dataset_util.bytes_list_feature(classes_text),
                     'image/object/class/label': dataset_util.int64_list_feature(classes)
                     }))
-
+                    
             writer.write(tf_example.SerializeToString())    
         writer.close()
         print('Successfully created the TFRecords: {}'.format(output_path))
@@ -550,13 +553,13 @@ def export_infer_graph(ckpt_dir, exported_model_dir, pipeline_config_path,
 
 
 
-def infer(path_list, exported_model_dir, label_map_path, results_dir, disp=True, num_infer=5, min_score_thresh=0.7):
+def infer(path, exported_model_dir, label_map_path, results_dir, disp=True, num_infer=5, min_score_thresh=0.7, from_tfrecords=False):
 
     ''' Use your exported model to infer on a path list of images. 
 
         Args:
             Required:
-                path_list: A list of images paths to infer on.
+                path_list: A list of images paths to infer on. Or the path to the TFRecord directory if infering from TFRecords files.
                 exported_model_dir: The path used to saved your model.
                 label_mapt_path: The path to your label_map file.
                 results_dir: The directory where you want to save your infered images.
@@ -569,75 +572,90 @@ def infer(path_list, exported_model_dir, label_map_path, results_dir, disp=True,
     '''
     saved_model_path = os.path.join(exported_model_dir, "saved_model")
     predict_fn = tf.contrib.predictor.from_saved_model(saved_model_path)
-    random.shuffle(path_list)
-    path_list = path_list[:num_infer]
+    if not from_tfrecords:
+        path_list = path
+        random.shuffle(path_list)
+        path_list = path_list[:num_infer]
+    elif from_tfrecords:
+        eval_path = os.path.join(path, "eval.record")
+        path_list = []
+        for example in tf.python_io.tf_record_iterator(eval_path):
+            tf_examp = tf.train.Example.FromString(example)
+            for key in tf_examp.features.feature:
+                if key=="image/filename":
+                    path_list.append(tf_examp.features.feature[key].bytes_list.value[0].decode("utf-8"))
+
     with tf.Session() as sess:
         category_index = label_map_util.create_category_index_from_labelmap(label_map_path)
+        counter=0
         for img_path in path_list:
-            img = cv2.imread(img_path)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            img_tensor = np.expand_dims(img, 0)
-            output_dict = predict_fn({"inputs": img_tensor})
-            
-           
-
-            num_detections = int(output_dict.pop('num_detections'))
-            output_dict = {key:value[0, :num_detections] for key,value in output_dict.items()}
-            output_dict['num_detections'] = num_detections
-            output_dict['detection_classes'] = output_dict['detection_classes'].astype(np.int64)
-
-            if 'detection_masks' in output_dict:
-                # Reframe the the bbox mask to the image size.
-                detection_masks_reframed = utils_ops.reframe_box_masks_to_image_masks(
-                                                            output_dict['detection_masks'], 
-                                                            output_dict['detection_boxes'],
-                                                            img.shape[0], 
-                                                            img.shape[1])      
-                detection_masks_reframed = tf.cast(detection_masks_reframed > 0.5, tf.uint8)          
-                mask_refr = sess.run(detection_masks_reframed)
-                output_dict['detection_masks_reframed'] = mask_refr
-            masks = output_dict.get('detection_masks_reframed', None)
-            boxes = output_dict["detection_boxes"]
-            classes = output_dict["detection_classes"]
-            scores = output_dict["detection_scores"]
+            try:
+                img = cv2.imread(img_path)
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                img_tensor = np.expand_dims(img, 0)
+                output_dict = predict_fn({"inputs": img_tensor})
+                
             
 
-            b = []
-            c = []
-            s = []
-            m = []
-            k = 0
-            for classe in classes:
-                b.append(boxes[k])
-                c.append(classe)
-                s.append(scores[k])
+                num_detections = int(output_dict.pop('num_detections'))
+                output_dict = {key:value[0, :num_detections] for key,value in output_dict.items()}
+                output_dict['num_detections'] = num_detections
+                output_dict['detection_classes'] = output_dict['detection_classes'].astype(np.int64)
+
+                if 'detection_masks' in output_dict:
+                    # Reframe the the bbox mask to the image size.
+                    detection_masks_reframed = utils_ops.reframe_box_masks_to_image_masks(
+                                                                output_dict['detection_masks'], 
+                                                                output_dict['detection_boxes'],
+                                                                img.shape[0], 
+                                                                img.shape[1])      
+                    detection_masks_reframed = tf.cast(detection_masks_reframed > 0.5, tf.uint8)          
+                    mask_refr = sess.run(detection_masks_reframed)
+                    output_dict['detection_masks_reframed'] = mask_refr
+                masks = output_dict.get('detection_masks_reframed', None)
+                boxes = output_dict["detection_boxes"]
+                classes = output_dict["detection_classes"]
+                scores = output_dict["detection_scores"]
+                
+
+                b = []
+                c = []
+                s = []
+                m = []
+                k = 0
+                for classe in classes:
+                    b.append(boxes[k])
+                    c.append(classe)
+                    s.append(scores[k])
+                    if masks is not None:
+                        m.append(masks[k])
+                    k+=1
+                boxes = np.array(b)
+                classes = np.array(c)
+                scores = np.array(s)
                 if masks is not None:
-                    m.append(masks[k])
-                k+=1
-            boxes = np.array(b)
-            classes = np.array(c)
-            scores = np.array(s)
-            if masks is not None:
-                masks = np.array(m)
+                    masks = np.array(m)
 
 
-            vis_util.visualize_boxes_and_labels_on_image_array(img, 
-                                                boxes,
-                                                classes,
-                                                scores,
-                                                category_index,
-                                                instance_masks=masks,
-                                                use_normalized_coordinates=True,
-                                                line_thickness=3,
-                                                min_score_thresh=min_score_thresh,
-                                                max_boxes_to_draw=None)
+                vis_util.visualize_boxes_and_labels_on_image_array(img, 
+                                                    boxes,
+                                                    classes,
+                                                    scores,
+                                                    category_index,
+                                                    instance_masks=masks,
+                                                    use_normalized_coordinates=True,
+                                                    line_thickness=3,
+                                                    min_score_thresh=min_score_thresh,
+                                                    max_boxes_to_draw=None)
 
-            img_name = img_path.split("/")[-1]
-            Image.fromarray(img).save(os.path.join(results_dir,img_name))
-            
-            if disp == True:
-                display(Image.fromarray(img))
+                img_name = img_path.split("/")[-1]
+                Image.fromarray(img).save(os.path.join(results_dir,img_name))
+                
+                if disp == True:
+                    display(Image.fromarray(img))
 
-
-
-
+            except:
+                counter+=1
+                continue
+    if counter>0:
+        print(f"{counter} weren't infered")
