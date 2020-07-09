@@ -50,7 +50,7 @@ def create_record_files(label_path, record_dir, tfExample_generator, annotation_
         print(f"Creating record file at {output_path}")
         for variables in tfExample_generator(label_map, ensemble=dataset, annotation_type=annotation_type):
             if isinstance(variables, ValueError):
-                print(variables)
+                print("Error", variables)
             elif annotation_type=="polygon":
                 (width, height, xmins, xmaxs, ymins, ymaxs, filename,
                      encoded_jpg, image_format, classes_text, classes, masks) = variables
@@ -575,7 +575,7 @@ def infer(path, exported_model_dir, label_map_path, results_dir, disp=True, num_
     if not from_tfrecords:
         path_list = path
         random.shuffle(path_list)
-        path_list = path_list[:num_infer]
+        
     elif from_tfrecords:
         eval_path = os.path.join(path, "eval.record")
         path_list = []
@@ -584,7 +584,7 @@ def infer(path, exported_model_dir, label_map_path, results_dir, disp=True, num_
             for key in tf_examp.features.feature:
                 if key=="image/filename":
                     path_list.append(tf_examp.features.feature[key].bytes_list.value[0].decode("utf-8"))
-
+    path_list = path_list[:num_infer]
     with tf.Session() as sess:
         category_index = label_map_util.create_category_index_from_labelmap(label_map_path)
         counter=0
