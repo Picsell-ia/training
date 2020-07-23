@@ -20,15 +20,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-# import logging
+import logging
 import re
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+import tf_slim as slim
 
 from tensorflow.python.ops import variables as tf_variables
-
-from tensorflow import logging as logging
-slim = tf.contrib.slim
 
 
 # TODO(derekjchow): Consider replacing with tf.contrib.filter_variables in
@@ -154,9 +152,8 @@ def get_variables_available_in_checkpoint(variables,
                         variable_name, ckpt_vars_to_shape_map[variable_name],
                         variable.shape.as_list())
     else:
-    #   logging.warning('Variable [%s] is not available in checkpoint',
-    #                   variable_name)
-        pass
+      logging.warning('Variable [%s] is not available in checkpoint',
+                      variable_name)
   if isinstance(variables, list):
     return list(vars_in_ckpt.values())
   return vars_in_ckpt

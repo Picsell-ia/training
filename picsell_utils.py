@@ -5,7 +5,7 @@ from object_detection.utils import config_util
 from object_detection.utils import label_map_util
 from PIL import Image, ImageDraw
 import os
-import numpy as np 
+import numpy as np
 import cv2
 import functools
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
@@ -21,40 +21,32 @@ from IPython.display import display
 import random
 
 
-
-
-        
-
-
-
 def create_record_files(label_path, record_dir, tfExample_generator, annotation_type):
     '''
         Function used to create the TFRecord files used for the training and evaluation.
-        
         TODO: Shard files for large dataset
-
-
         Args:
             label_path: Path to the label map file.
             record_dir: Path used to write the records files.
             tfExample_generator: Use the generator from the Picsell.ia SDK by default or provide your own generator.
-            annotation_type: "polygon" or "rectangle", depending on your project type. Polygon will compute the masks from your polygon-type annotations. 
+            annotation_type: "polygon" or "rectangle", depending on your project type.
+                            Polygon will compute the masks from your polygon-type annotations.
     '''
     label_map = label_map_util.load_labelmap(label_path)
-    label_map = label_map_util.get_label_map_dict(label_map) 
+    label_map = label_map_util.get_label_map_dict(label_map)
     datasets = ["train", "eval"]
-    
+
     for dataset in datasets:
-        output_path = os.path.join(record_dir, dataset+".record")
-        writer = tf.python_io.TFRecordWriter(output_path)
+        output_path = os.path.join(record_dir, dataset + ".record")
+        writer = tf.io.TFRecordWriter(output_path)
         print(f"Creating record file at {output_path}")
         for variables in tfExample_generator(label_map, ensemble=dataset, annotation_type=annotation_type):
             if isinstance(variables, ValueError):
                 print("Error", variables)
-            elif annotation_type=="polygon":
+            elif annotation_type == "polygon":
                 (width, height, xmins, xmaxs, ymins, ymaxs, filename,
-                     encoded_jpg, image_format, classes_text, classes, masks) = variables
-            
+                 encoded_jpg, image_format, classes_text, classes, masks) = variables
+
                 tf_example = tf.train.Example(features=tf.train.Features(feature={
                     'image/height': dataset_util.int64_feature(height),
                     'image/width': dataset_util.int64_feature(width),
@@ -69,11 +61,11 @@ def create_record_files(label_path, record_dir, tfExample_generator, annotation_
                     'image/object/class/text': dataset_util.bytes_list_feature(classes_text),
                     'image/object/class/label': dataset_util.int64_list_feature(classes),
                     'image/object/mask': dataset_util.bytes_list_feature(masks)
-                }))               
-                
-            elif annotation_type=="rectangle":
+                }))
+
+            elif annotation_type == "rectangle":
                 (width, height, xmins, xmaxs, ymins, ymaxs, filename,
-                        encoded_jpg, image_format, classes_text, classes) = variables
+                 encoded_jpg, image_format, classes_text, classes) = variables
 
                 tf_example = tf.train.Example(features=tf.train.Features(feature={
                     'image/height': dataset_util.int64_feature(height),
@@ -88,14 +80,14 @@ def create_record_files(label_path, record_dir, tfExample_generator, annotation_
                     'image/object/bbox/ymax': dataset_util.float_list_feature(ymaxs),
                     'image/object/class/text': dataset_util.bytes_list_feature(classes_text),
                     'image/object/class/label': dataset_util.int64_list_feature(classes)
-                    }))
-                    
-            writer.write(tf_example.SerializeToString())    
+                }))
+
+            writer.write(tf_example.SerializeToString())
         writer.close()
         print('Successfully created the TFRecords: {}'.format(output_path))
 
 def update_num_classes(config_dict, label_map):
-    ''' 
+    '''
     Update the number of classes inside the protobuf configuration dictionnary depending on the number of classes inside the label map.
 
         Args :
@@ -115,7 +107,6 @@ def update_num_classes(config_dict, label_map):
         raise ValueError("Expected the model to be one of 'faster_rcnn' or 'ssd'.")
 
 
-
 def check_batch_size(config_dict):
     model_config = config_dict["model"]
     meta_architecture = model_config.WhichOneof("model")
@@ -127,14 +118,12 @@ def check_batch_size(config_dict):
     else:
         raise ValueError("Unknown model type: {}".format(meta_architecture))
 
-    if image_resizer.HasField("keep_aspect_ratio_resizer") and batch_size>1:
+    if image_resizer.HasField("keep_aspect_ratio_resizer") and batch_size > 1:
         print("Please be careful, your image resizer is keep_aspect_ratio_resizer and your batch size is >1.")
-        print("This mean that all your images should have the same shape. If not then set batch size to 1 or change the image resizer to a fixed_shape_resizer.")
-        
-    #image_resizer.HasField("fixed_shape_resizer"):
-    
+        print("This mean that all your images should have the same shape. \
+              If not then set batch size to 1 or change the image resizer to a fixed_shape_resizer.")
 
-    
+    # image_resizer.HasField("fixed_shape_resizer"):
 
 def set_image_resizer(config_dict, shape):
     '''
@@ -158,7 +147,7 @@ def set_image_resizer(config_dict, shape):
         image_resizer = model_config.ssd.image_resizer
     else:
         raise ValueError("Unknown model type: {}".format(meta_architecture))
-    
+
     if image_resizer.HasField("keep_aspect_ratio_resizer"):
         image_resizer.keep_aspect_ratio_resizer.max_dimension = shape[1]
         image_resizer.keep_aspect_ratio_resizer.min_dimension = shape[0]
@@ -182,12 +171,11 @@ def edit_eval_config(config_dict, annotation_type, eval_number):
             ValueError "eval_number isn't an int". If you didn't provide a int for the eval_number.
     '''
 
-
     eval_config = config_dict["eval_config"]
     eval_config.num_visualizations = 0
-    if annotation_type=="rectangle":
+    if annotation_type == "rectangle":
         eval_config.metrics_set[0] = "coco_detection_metrics"
-    elif annotation_type=="polygon":
+    elif annotation_type == "polygon":
         eval_config.metrics_set[0] = "coco_mask_metrics"
     else:
         raise ValueError("Wrong annotation type provided")
@@ -228,10 +216,10 @@ def edit_masks(config_dict, mask_type="PNG_MASKS"):
 
     config_dict["train_input_config"].load_instance_masks = True
     config_dict["eval_input_config"].load_instance_masks = True
-    if mask_type=="PNG_MASKS":
+    if mask_type == "PNG_MASKS":
         config_dict["train_input_config"].mask_type = 2
         config_dict["eval_input_config"].mask_type = 2
-    elif mask_type=="NUMERICAL_MASKS":
+    elif mask_type == "NUMERICAL_MASKS":
         config_dict["train_input_config"].mask_type = 1
         config_dict["eval_input_config"].mask_type = 1
     else:
@@ -255,7 +243,6 @@ def set_variable_loader(config_dict, incremental_or_transfer, FromSratch=False):
         config_dict["train_config"].load_all_detection_checkpoint_vars = False
     else:
         raise ValueError("Please choose if you want to do transfer or incremental learning") 
-
 
 
 def edit_config(model_selected, config_output_dir, num_steps, label_map_path, record_dir, eval_number, annotation_type, 
@@ -284,27 +271,26 @@ def edit_config(model_selected, config_output_dir, num_steps, label_map_path, re
 
     '''
 
-    
     file_list = os.listdir(model_selected)
     ckpt_ids = []
     for p in file_list:
         if "index" in p:
             if "-" in p:
                 ckpt_ids.append(int(p.split('-')[1].split('.')[0]))
-    if len(ckpt_ids)>0:
-        ckpt_path = os.path.join(model_selected,"model.ckpt-{}".format(str(max(ckpt_ids))))
-    
+    if len(ckpt_ids) > 0:
+        ckpt_path = os.path.join(model_selected, "model.ckpt-{}".format(str(max(ckpt_ids))))
+
     else:
         ckpt_path = os.path.join(model_selected, "model.ckpt")
 
-    configs = config_util.get_configs_from_pipeline_file(os.path.join(model_selected,'pipeline.config'))
+    configs = config_util.get_configs_from_pipeline_file(os.path.join(model_selected, 'pipeline.config'))
     label_map = label_map_util.load_labelmap(label_map_path)
 
     config_util._update_train_steps(configs, num_steps)
-    update_different_paths(configs, ckpt_path=ckpt_path, 
-                            label_map_path=label_map_path, 
-                            train_record_path=os.path.join(record_dir, "train.record"), 
-                            eval_record_path=os.path.join(record_dir,"eval.record"))
+    update_different_paths(configs, ckpt_path=ckpt_path,
+                           label_map_path=label_map_path,
+                           train_record_path=os.path.join(record_dir, "train.record"),
+                           eval_record_path=os.path.join(record_dir,"eval.record"))
 
     if learning_rate is not None:
         config_util._update_initial_learning_rate(configs, learning_rate)
@@ -313,7 +299,7 @@ def edit_config(model_selected, config_output_dir, num_steps, label_map_path, re
         config_util._update_batch_size(configs, batch_size)
     check_batch_size(configs)
 
-    if annotation_type=="polygon":
+    if annotation_type == "polygon":
         edit_masks(configs, mask_type="PNG_MASKS")
    
     if resizer_size is not None:
@@ -328,13 +314,10 @@ def edit_config(model_selected, config_output_dir, num_steps, label_map_path, re
     config_util.save_pipeline_config(config_proto, directory=config_output_dir)
     print(f"Configuration successfully edited and saved at {config_output_dir}")
 
-
-
 def train(master='', save_summaries_secs=30, task=0, num_clones=1, clone_on_cpu=False, worker_replicas=1, ps_tasks=0, 
-                    ckpt_dir='', conf_dir='', train_config_path='', input_config_path='', model_config_path=''):   
-   
+          ckpt_dir='', conf_dir='', train_config_path='', input_config_path='', model_config_path=''):      
 
-    pipeline_config_path = os.path.join(conf_dir,"pipeline.config")
+    pipeline_config_path = os.path.join(conf_dir, "pipeline.config")
     configs = config_util.get_configs_from_pipeline_file(pipeline_config_path)
 
     tf.logging.set_verbosity(tf.logging.INFO)

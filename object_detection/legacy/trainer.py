@@ -21,8 +21,8 @@ DetectionModel.
 
 import functools
 
-import tensorflow as tf
-from tensorflow.contrib import slim as contrib_slim
+import tensorflow.compat.v1 as tf
+import tf_slim as slim
 
 from object_detection.builders import optimizer_builder
 from object_detection.builders import preprocessor_builder
@@ -32,8 +32,6 @@ from object_detection.core import standard_fields as fields
 from object_detection.utils import ops as util_ops
 from object_detection.utils import variables_helper
 from deployment import model_deploy
-
-slim = contrib_slim
 
 
 def create_input_queue(batch_size_per_clone, create_tensor_dict_fn,
@@ -221,7 +219,6 @@ def train(create_tensor_dict_fn,
           worker_job_name,
           is_chief,
           train_dir,
-          save_summaries_secs,
           graph_hook_fn=None):
   """Training function for detection models.
 
@@ -413,6 +410,6 @@ def train(create_tensor_dict_fn,
         summary_op=summary_op,
         number_of_steps=(
             train_config.num_steps if train_config.num_steps else None),
-        save_summaries_secs=save_summaries_secs, ##120 de base
+        save_summaries_secs=120,
         sync_optimizer=sync_optimizer,
         saver=saver)

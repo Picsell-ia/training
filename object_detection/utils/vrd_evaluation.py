@@ -33,13 +33,10 @@ from __future__ import print_function
 
 from abc import abstractmethod
 import collections
-# import logging
+import logging
 import numpy as np
 import six
 from six.moves import range
-
-from tensorflow import logging as logging
-slim = tf.contrib.slim
 
 from object_detection.core import standard_fields
 from object_detection.utils import metrics
